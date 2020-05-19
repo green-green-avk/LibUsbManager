@@ -37,9 +37,12 @@ import java.util.Map;
  */
 @SuppressWarnings("WeakerAccess,unused")
 public final class LibUsbManager {
-    private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
-    private static final String ACTION_USB_ATTACHED = "android.hardware.usb.action.USB_DEVICE_ATTACHED";
-    private static final String ACTION_USB_DETACHED = "android.hardware.usb.action.USB_DEVICE_DETACHED";
+    private static final String ACTION_USB_PERMISSION =
+            "com.android.example.USB_PERMISSION";
+    private static final String ACTION_USB_ATTACHED =
+            "android.hardware.usb.action.USB_DEVICE_ATTACHED";
+    private static final String ACTION_USB_DETACHED =
+            "android.hardware.usb.action.USB_DEVICE_DETACHED";
 
     private static final class ParseException extends RuntimeException {
         private ParseException(final String message) {
@@ -66,8 +69,8 @@ public final class LibUsbManager {
         uiHandler.post(new Runnable() {
             @Override
             public void run() {
-                Toast.makeText(ctx, "LibUSB helper: " + e.getMessage(), Toast.LENGTH_LONG)
-                        .show();
+                Toast.makeText(ctx, ctx.getString(R.string.msg_error_s, e.getMessage()),
+                        Toast.LENGTH_LONG).show();
             }
         });
     }
@@ -75,7 +78,8 @@ public final class LibUsbManager {
     @NonNull
     private UsbManager getUsbManager() {
         final UsbManager usbManager = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
-        if (usbManager == null) throw new ProcessException("Cannot obtain USB service");
+        if (usbManager == null)
+            throw new ProcessException(ctx.getString(R.string.msg_cannot_obtain_usb_service));
         return usbManager;
     }
 
@@ -169,8 +173,10 @@ public final class LibUsbManager {
     private void client(@NonNull final LocalSocket socket) {
         UsbDeviceConnection devConn = null;
         try {
+            // TODO: Check conditions
             if (Process.myUid() != socket.getPeerCredentials().getUid())
-                throw new ParseException("Spoofing detected!"); // TODO: Or not to check?
+                throw new ParseException(ctx.getString(R.string.msg_spoofing_detected));
+            // =======
             final InputStream cis = socket.getInputStream();
             final DataInputStream dis = new DataInputStream(cis);
             final String devName = dis.readUTF();
@@ -181,10 +187,13 @@ public final class LibUsbManager {
             final UsbManager usbManager = getUsbManager();
             final Map<String, UsbDevice> devList = usbManager.getDeviceList();
             final UsbDevice dev = devList.get(devName);
-            if (dev == null) throw new ProcessException("No device found: " + devName);
+            if (dev == null)
+                throw new ProcessException(ctx.getString(R.string.msg_no_device_found_s, devName));
             obtainUsbPermission(dev);
             devConn = usbManager.openDevice(dev);
-            if (devConn == null) throw new ProcessException("Unable to open device: " + devName);
+            if (devConn == null)
+                throw new ProcessException(ctx.getString(R.string.msg_unable_to_open_device_s,
+                        devName));
             socket.setFileDescriptorsForSend(new FileDescriptor[]{
                     ParcelFileDescriptor.adoptFd(devConn.getFileDescriptor()).getFileDescriptor()
             });
@@ -250,15 +259,15 @@ public final class LibUsbManager {
      * Creates and starts a <b>libusb</b> manager instance for your application.
      * (Yes, this simple)
      * <p>Usage:</p>
-     * <pre>{@code
+     * <pre><code>
      * ...
-     * {@literal @}Keep // Protect from unwanted destruction in case minifier is used.
+     * {@literal @}Keep // Protect from unwanted destruction in a case minifier is used.
      * {@literal @}NonNull
      * private usbMan;
      * ...
      * usbMan = new LibUsbManager(ctx);
      * ...
-     * }</pre>
+     * </code></pre>
      *
      * @param ctx      Application context.
      * @param sockName Socket name.

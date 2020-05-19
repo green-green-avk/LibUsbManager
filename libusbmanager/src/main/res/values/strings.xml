@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">LibUsb Manager</string>
+    <string name="msg_error_s">LibUSB helper: %s</string>
+    <string name="msg_cannot_obtain_usb_service">Cannot obtain USB service</string>
+    <string name="msg_no_device_found_s">No device found: %s</string>
+    <string name="msg_unable_to_open_device_s">Unable to open device: %s</string>
+    <string name="msg_spoofing_detected">Spoofing detected!</string>
 </resources>
