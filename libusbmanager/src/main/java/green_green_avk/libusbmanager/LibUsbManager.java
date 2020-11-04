@@ -12,12 +12,11 @@ import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
-import android.util.Log;
 import android.widget.Toast;
 
-import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -36,7 +35,7 @@ import java.util.Map;
  * <a href="https://github.com/green-green-avk/libusb-1.0.23-android-helper-service-patch">libusb-1.0.23-android-helper-service-patch</a>
  */
 @SuppressWarnings("WeakerAccess,unused")
-public final class LibUsbManager {
+public class LibUsbManager {
     private static final String ACTION_USB_PERMISSION =
             "com.android.example.USB_PERMISSION";
     private static final String ACTION_USB_ATTACHED =
@@ -57,29 +56,57 @@ public final class LibUsbManager {
     }
 
     @NonNull
-    private final Context ctx;
+    protected final Context ctx;
     @NonNull
     private final String sockName;
     @NonNull
-    private final Handler uiHandler;
-    @NonNull
     private final Thread lth;
 
-    private void showError(@NonNull final Throwable e) {
-        uiHandler.post(new Runnable() {
+    /**
+     * Something just to be reported happened.
+     */
+    protected void onClientException(@NonNull final Throwable e) {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
-                Toast.makeText(ctx, ctx.getString(R.string.msg_error_s, e.getMessage()),
-                        Toast.LENGTH_LONG).show();
+                Toast.makeText(ctx, ctx.getString(R.string.libusbmanager_msg_error_s,
+                        e.getMessage()), Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    /**
+     * Something sinister happened...
+     */
+    protected void onClientError(@NonNull final Throwable e) {
+        rethrow(e);
+    }
+
+    /**
+     * Something sinister happened...
+     */
+    protected void onServerError(@NonNull final Throwable e) {
+        rethrow(e);
+    }
+
+    /**
+     * Called after final cleanup.
+     */
+    protected void onServerExit() {
+    }
+
+    private void rethrow(@NonNull final Throwable e) {
+        if (e instanceof RuntimeException) throw (RuntimeException) e;
+        if (e instanceof Error) throw (Error) e;
+        throw new RuntimeException(e);
     }
 
     @NonNull
     private UsbManager getUsbManager() {
         final UsbManager usbManager = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
         if (usbManager == null)
-            throw new ProcessException(ctx.getString(R.string.msg_cannot_obtain_usb_service));
+            throw new ProcessException(ctx.getString(
+                    R.string.libusbmanager_msg_cannot_obtain_usb_service));
         return usbManager;
     }
 
@@ -124,7 +151,7 @@ public final class LibUsbManager {
             if (state != DEV_EXISTS) out.writeByte(state);
             out.writeUTF(dev == null ? "" : dev.getDeviceName());
         } catch (final Throwable e) {
-            showError(e);
+            onClientException(e);
         }
     }
 
@@ -142,7 +169,7 @@ public final class LibUsbManager {
         });
         final BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
-            public void onReceive(final Context context, final Intent intent) {
+            public void onReceive(final Context context, @NonNull final Intent intent) {
                 final String action = intent.getAction();
                 if (action == null) return;
                 switch (action) {
@@ -175,7 +202,8 @@ public final class LibUsbManager {
         try {
             // TODO: Check conditions
             if (Process.myUid() != socket.getPeerCredentials().getUid())
-                throw new ParseException(ctx.getString(R.string.msg_spoofing_detected));
+                throw new ParseException(ctx.getString(
+                        R.string.libusbmanager_msg_spoofing_detected));
             // =======
             final InputStream cis = socket.getInputStream();
             final DataInputStream dis = new DataInputStream(cis);
@@ -188,12 +216,13 @@ public final class LibUsbManager {
             final Map<String, UsbDevice> devList = usbManager.getDeviceList();
             final UsbDevice dev = devList.get(devName);
             if (dev == null)
-                throw new ProcessException(ctx.getString(R.string.msg_no_device_found_s, devName));
+                throw new ProcessException(ctx.getString(
+                        R.string.libusbmanager_msg_no_device_found_s, devName));
             obtainUsbPermission(dev);
             devConn = usbManager.openDevice(dev);
             if (devConn == null)
-                throw new ProcessException(ctx.getString(R.string.msg_unable_to_open_device_s,
-                        devName));
+                throw new ProcessException(ctx.getString(
+                        R.string.libusbmanager_msg_unable_to_open_device_s, devName));
             socket.setFileDescriptorsForSend(new FileDescriptor[]{
                     ParcelFileDescriptor.adoptFd(devConn.getFileDescriptor()).getFileDescriptor()
             });
@@ -202,7 +231,7 @@ public final class LibUsbManager {
         } catch (final InterruptedIOException ignored) {
         } catch (final SecurityException | IOException |
                 ParseException | ProcessException e) {
-            showError(e);
+            onClientException(e);
         } finally {
             if (devConn != null) devConn.close();
         }
@@ -221,10 +250,14 @@ public final class LibUsbManager {
                         public void run() {
                             try {
                                 client(socket);
+                            } catch (final Throwable e) {
+                                onClientError(e);
                             } finally {
                                 try {
                                     socket.close();
                                 } catch (final IOException ignored) {
+                                } catch (final Throwable e) {
+                                    onClientError(e);
                                 }
                             }
                         }
@@ -233,14 +266,16 @@ public final class LibUsbManager {
                     cth.start();
                 }
             } catch (final InterruptedIOException ignored) {
-            } catch (final IOException e) {
-                Log.e("LibUsbServer", "IO", e);
+            } catch (final Throwable e) {
+                onServerError(e);
+            } finally {
+                if (serverSocket != null)
+                    try {
+                        serverSocket.close();
+                    } catch (final Throwable ignored) {
+                    }
+                onServerExit();
             }
-            if (serverSocket != null)
-                try {
-                    serverSocket.close();
-                } catch (final IOException ignored) {
-                }
         }
     };
 
@@ -250,7 +285,6 @@ public final class LibUsbManager {
      *
      * @param ctx Application context.
      */
-    @MainThread
     public LibUsbManager(@NonNull final Context ctx) {
         this(ctx, ctx.getApplicationContext().getPackageName() + ".libusb");
     }
@@ -272,11 +306,9 @@ public final class LibUsbManager {
      * @param ctx      Application context.
      * @param sockName Socket name.
      */
-    @MainThread
     public LibUsbManager(@NonNull final Context ctx, @NonNull final String sockName) {
         this.ctx = ctx.getApplicationContext();
         this.sockName = sockName;
-        uiHandler = new Handler();
         lth = new Thread(server, "LibUsbServer");
         lth.setDaemon(true);
         lth.start();
