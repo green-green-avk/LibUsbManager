@@ -1,49 +1,55 @@
-apply plugin: 'com.android.library'
-apply plugin: 'com.github.dcendents.android-maven'
+plugins {
+    id 'com.android.library'
+    id 'maven-publish'
+}
+
 group = 'com.github.green-green-avk'
-version = '1.4'
+version = '1.5'
 
 android {
-    compileSdkVersion 29
+    compileSdkVersion 30
 
     defaultConfig {
         minSdkVersion 14
-        targetSdkVersion 29
-        versionCode 5
+        targetSdkVersion 30
+        versionCode 6
         versionName version
     }
 }
 
-configurations {
-    javadocDeps
-}
-
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation 'androidx.annotation:annotation:1.2.0'
-    javadocDeps 'androidx.annotation:annotation:1.2.0'
 }
 
-// Build a jar with source files.
 task sourcesJar(type: Jar) {
+    classifier "sources"
     from android.sourceSets.main.java.srcDirs
-    classifier = 'sources'
 }
 
 task javadoc(type: Javadoc) {
     failOnError true
-    source = android.sourceSets.main.java.sourceFiles
+    source = android.sourceSets.main.java.srcDirs
     classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-    classpath += configurations.javadocDeps
+    android.libraryVariants.all { variant ->
+        if (variant.name == 'release') {
+            owner.classpath += variant.javaCompileProvider.get().classpath
+        }
+    }
 }
 
-// Build a jar with javadoc.
 task javadocJar(type: Jar, dependsOn: javadoc) {
-    classifier = 'javadoc'
+    classifier 'javadoc'
     from javadoc.destinationDir
 }
 
-artifacts {
-    archives sourcesJar
-    archives javadocJar
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                artifact(sourcesJar)
+                artifact(javadocJar)
+            }
+        }
+    }
 }
