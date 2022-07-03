@@ -63,7 +63,9 @@ public class LibUsbManager {
     private final Thread lth;
 
     /**
-     * Something just to be reported happened.
+     * Something just-to-be-reported happened.
+     *
+     * @param e The cause.
      */
     protected void onClientException(@NonNull final Throwable e) {
         new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -77,6 +79,8 @@ public class LibUsbManager {
 
     /**
      * Something sinister happened...
+     *
+     * @param e The cause.
      */
     protected void onClientError(@NonNull final Throwable e) {
         rethrow(e);
@@ -84,6 +88,8 @@ public class LibUsbManager {
 
     /**
      * Something sinister happened...
+     *
+     * @param e The cause.
      */
     protected void onServerError(@NonNull final Throwable e) {
         rethrow(e);
@@ -304,7 +310,8 @@ public class LibUsbManager {
      * </code></pre>
      *
      * @param ctx      Application context.
-     * @param sockName Socket name.
+     * @param sockName Socket name (in the Linux abstract namespace,
+     *                 see {@link LocalServerSocket#LocalServerSocket(String)}).
      */
     public LibUsbManager(@NonNull final Context ctx, @NonNull final String sockName) {
         this.ctx = ctx.getApplicationContext();
