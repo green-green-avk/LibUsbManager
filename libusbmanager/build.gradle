@@ -4,23 +4,28 @@ plugins {
 }
 
 group = 'com.github.green-green-avk'
-version = '1.6'
+version = '1.7'
 
 android {
     namespace 'green_green_avk.libusbmanager'
 
-    compileSdkVersion 30
+    compileSdk 31
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 
     defaultConfig {
-        minSdkVersion 14
-        targetSdkVersion 30
-        versionCode 7
+        minSdk 14
+        targetSdk 31
+        versionCode 8
         versionName version
     }
 }
 
 dependencies {
-    implementation 'androidx.annotation:annotation:1.4.0'
+    implementation 'androidx.annotation:annotation:1.5.0'
 }
 
 task sourcesJar(type: Jar) {

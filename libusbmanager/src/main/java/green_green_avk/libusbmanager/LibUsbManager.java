@@ -68,13 +68,11 @@ public class LibUsbManager {
      * @param e The cause.
      */
     protected void onClientException(@NonNull final Throwable e) {
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(ctx, ctx.getString(R.string.libusbmanager_msg_error_s,
-                        e.getMessage()), Toast.LENGTH_LONG).show();
-            }
-        });
+        new Handler(Looper.getMainLooper()).post(() ->
+                Toast.makeText(ctx, ctx.getString(
+                        R.string.libusbmanager_msg_error_s,
+                        e.getMessage()
+                ), Toast.LENGTH_LONG).show());
     }
 
     /**
@@ -101,9 +99,11 @@ public class LibUsbManager {
     protected void onServerExit() {
     }
 
-    private void rethrow(@NonNull final Throwable e) {
-        if (e instanceof RuntimeException) throw (RuntimeException) e;
-        if (e instanceof Error) throw (Error) e;
+    private static void rethrow(@NonNull final Throwable e) {
+        if (e instanceof RuntimeException)
+            throw (RuntimeException) e;
+        if (e instanceof Error)
+            throw (Error) e;
         throw new RuntimeException(e);
     }
 
@@ -126,16 +126,20 @@ public class LibUsbManager {
                 @Override
                 public void onReceive(final Context context, final Intent intent) {
                     final String action = intent.getAction();
-                    if (!ACTION_USB_PERMISSION.equals(action)) return;
+                    if (!ACTION_USB_PERMISSION.equals(action))
+                        return;
                     synchronized (lock) {
                         lock.notifyAll();
                     }
                 }
             };
             synchronized (lock) {
-                ctx.registerReceiver(receiver, new IntentFilter(ACTION_USB_PERMISSION));
+                ctx.registerReceiver(receiver,
+                        new IntentFilter(ACTION_USB_PERMISSION));
                 usbManager.requestPermission(dev, PendingIntent.getBroadcast(
-                        ctx, 0, new Intent(ACTION_USB_PERMISSION), 0));
+                        ctx, 0,
+                        new Intent(ACTION_USB_PERMISSION),
+                        PendingIntent.FLAG_MUTABLE));
                 try {
                     lock.wait();
                 } catch (final InterruptedException ignored) {
@@ -154,7 +158,8 @@ public class LibUsbManager {
                                     @Nullable final UsbDevice dev, final int state) {
         try {
             final DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-            if (state != DEV_EXISTS) out.writeByte(state);
+            if (state != DEV_EXISTS)
+                out.writeByte(state);
             out.writeUTF(dev == null ? "" : dev.getDeviceName());
         } catch (final Throwable e) {
             onClientException(e);
@@ -165,28 +170,26 @@ public class LibUsbManager {
         final HandlerThread outTh = new HandlerThread("libUsbEventsOutput");
         outTh.start();
         final Handler outH = new Handler(outTh.getLooper());
-        outH.post(new Runnable() {
-            @Override
-            public void run() {
-                for (final UsbDevice dev : getUsbManager().getDeviceList().values())
-                    tryWriteDeviceName(socket, dev, DEV_EXISTS);
-                tryWriteDeviceName(socket, null, DEV_EXISTS);
-            }
+        outH.post(() -> {
+            for (final UsbDevice dev : getUsbManager().getDeviceList().values())
+                tryWriteDeviceName(socket, dev, DEV_EXISTS);
+            tryWriteDeviceName(socket, null, DEV_EXISTS);
         });
         final BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(final Context context, @NonNull final Intent intent) {
                 final String action = intent.getAction();
-                if (action == null) return;
+                if (action == null)
+                    return;
                 switch (action) {
                     case ACTION_USB_ATTACHED:
                         tryWriteDeviceName(socket,
-                                (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE),
+                                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE),
                                 DEV_ATTACHED);
                         break;
                     case ACTION_USB_DETACHED:
                         tryWriteDeviceName(socket,
-                                (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE),
+                                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE),
                                 DEV_DETACHED);
                         break;
                 }
@@ -239,7 +242,8 @@ public class LibUsbManager {
                 ParseException | ProcessException e) {
             onClientException(e);
         } finally {
-            if (devConn != null) devConn.close();
+            if (devConn != null)
+                devConn.close();
         }
     }
 
@@ -287,7 +291,7 @@ public class LibUsbManager {
 
     /**
      * Like {@link #LibUsbManager(Context ctx, String sockName)} but with
-     * <code>sockName = ctx.getApplicationContext().getPackageName() + ".libusb"</code>.
+     * {@code sockName = ctx.getApplicationContext().getPackageName() + ".libusb"}.
      *
      * @param ctx Application context.
      */
