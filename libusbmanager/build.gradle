@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.github.green-green-avk'
-version = '1.8'
+version = '1.9'
 
 android {
     namespace 'green_green_avk.libusbmanager'
@@ -24,7 +24,7 @@ android {
 
     publishing {
         singleVariant('release') {
-            withJavadocJar()
+            // withJavadocJar() // Useless as it can't Java fields and {@code ...} at least.
             withSourcesJar()
         }
     }
@@ -34,11 +34,31 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.5.0'
 }
 
+task javadoc(type: Javadoc) {
+    failOnError true
+    source = android.sourceSets.main.java.srcDirs
+    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+    options {
+        addStringOption('link', 'https://developer.android.com/reference')
+    }
+    android.libraryVariants.all { variant ->
+        if (variant.name == 'release') {
+            owner.classpath += variant.javaCompileProvider.get().classpath
+        }
+    }
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    archiveClassifier.set 'javadoc'
+    from javadoc.destinationDir
+}
+
 publishing {
     publications {
         release(MavenPublication) {
             afterEvaluate {
                 from components.release
+                artifact(javadocJar)
             }
         }
     }
