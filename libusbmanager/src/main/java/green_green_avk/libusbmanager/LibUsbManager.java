@@ -30,18 +30,18 @@ import java.util.Map;
 
 /**
  * A <b>libusb</b> manager for Termux-like applications.
+ * <p>
  * Device enumeration and hot plug/unplug events are supported.
- * To be used with
- * <a href="https://github.com/green-green-avk/libusb-1.0.23-android-helper-service-patch">libusb-1.0.23-android-helper-service-patch</a>
+ * <p>
+ * To be used with <b>green-green-avk/libusb</b> branches:
+ * <ul>
+ * <li><a href="https://github.com/green-green-avk/libusb/tree/v1.0.23-android-libusbmanager">v1.0.23-android-libusbmanager</a></li>
+ * <li><a href="https://github.com/green-green-avk/libusb/tree/v1.0.26-android-libusbmanager">v1.0.26-android-libusbmanager</a></li>
+ * </ul>
  */
 @SuppressWarnings("WeakerAccess,unused")
 public class LibUsbManager {
-    private static final String ACTION_USB_PERMISSION =
-            "com.android.example.USB_PERMISSION";
-    private static final String ACTION_USB_ATTACHED =
-            "android.hardware.usb.action.USB_DEVICE_ATTACHED";
-    private static final String ACTION_USB_DETACHED =
-            "android.hardware.usb.action.USB_DEVICE_DETACHED";
+    private static final String ACTION_USB_PERMISSION_SUFFIX = ".USB_PERMISSION";
 
     private static final class ParseException extends RuntimeException {
         private ParseException(final String message) {
@@ -55,10 +55,15 @@ public class LibUsbManager {
         }
     }
 
+    /**
+     * The application context.
+     */
     @NonNull
-    protected final Context ctx;
+    protected final Context context;
     @NonNull
-    private final String sockName;
+    private final String socketName;
+    @NonNull
+    private final String actionUsbPermission;
     @NonNull
     private final Thread lth;
 
@@ -69,7 +74,7 @@ public class LibUsbManager {
      */
     protected void onClientException(@NonNull final Throwable e) {
         new Handler(Looper.getMainLooper()).post(() ->
-                Toast.makeText(ctx, ctx.getString(
+                Toast.makeText(context, context.getString(
                         R.string.libusbmanager_msg_error_s,
                         e.getMessage()
                 ), Toast.LENGTH_LONG).show());
@@ -109,44 +114,52 @@ public class LibUsbManager {
 
     @NonNull
     private UsbManager getUsbManager() {
-        final UsbManager usbManager = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
+        final UsbManager usbManager =
+                (UsbManager) context.getSystemService(Context.USB_SERVICE);
         if (usbManager == null)
-            throw new ProcessException(ctx.getString(
+            throw new ProcessException(context.getString(
                     R.string.libusbmanager_msg_cannot_obtain_usb_service));
         return usbManager;
     }
 
-    private final Object obtainUsbPermissionLock = new Object();
+    private static final Object obtainUsbPermissionLock = new Object();
 
-    private void obtainUsbPermission(@NonNull final UsbDevice dev) {
+    private boolean obtainUsbPermission(@NonNull final UsbDevice dev) {
         synchronized (obtainUsbPermissionLock) {
-            final Object lock = new Object();
+            final boolean[] result = new boolean[2];
             final UsbManager usbManager = getUsbManager();
             final BroadcastReceiver receiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(final Context context, final Intent intent) {
-                    final String action = intent.getAction();
-                    if (!ACTION_USB_PERMISSION.equals(action))
+                    if (!actionUsbPermission.equals(intent.getAction()))
                         return;
-                    synchronized (lock) {
-                        lock.notifyAll();
+                    synchronized (result) {
+                        result[0] = true;
+                        result[1] = intent.getBooleanExtra(
+                                UsbManager.EXTRA_PERMISSION_GRANTED,
+                                false
+                        );
+                        result.notifyAll();
                     }
                 }
             };
-            synchronized (lock) {
-                ctx.registerReceiver(receiver,
-                        new IntentFilter(ACTION_USB_PERMISSION));
+            synchronized (result) {
+                context.registerReceiver(receiver,
+                        new IntentFilter(actionUsbPermission));
                 usbManager.requestPermission(dev, PendingIntent.getBroadcast(
-                        ctx, 0,
-                        new Intent(ACTION_USB_PERMISSION),
+                        context, 0,
+                        new Intent(actionUsbPermission),
                         PendingIntent.FLAG_MUTABLE));
                 try {
-                    lock.wait();
+                    while (!result[0]) {
+                        result.wait();
+                    }
                 } catch (final InterruptedException ignored) {
                 } finally {
-                    ctx.unregisterReceiver(receiver);
+                    context.unregisterReceiver(receiver);
                 }
             }
+            return result[1];
         }
     }
 
@@ -182,12 +195,12 @@ public class LibUsbManager {
                 if (action == null)
                     return;
                 switch (action) {
-                    case ACTION_USB_ATTACHED:
+                    case UsbManager.ACTION_USB_DEVICE_ATTACHED:
                         tryWriteDeviceName(socket,
                                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE),
                                 DEV_ATTACHED);
                         break;
-                    case ACTION_USB_DETACHED:
+                    case UsbManager.ACTION_USB_DEVICE_DETACHED:
                         tryWriteDeviceName(socket,
                                 intent.getParcelableExtra(UsbManager.EXTRA_DEVICE),
                                 DEV_DETACHED);
@@ -195,13 +208,13 @@ public class LibUsbManager {
                 }
             }
         };
-        final IntentFilter iflt = new IntentFilter(ACTION_USB_ATTACHED);
-        iflt.addAction(ACTION_USB_DETACHED);
-        ctx.registerReceiver(receiver, iflt, null, outH);
+        final IntentFilter iflt = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        iflt.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        context.registerReceiver(receiver, iflt, null, outH);
         try {
             while (socket.getInputStream().read() != -1) ; // Wait for closing by the client...
         } finally {
-            ctx.unregisterReceiver(receiver);
+            context.unregisterReceiver(receiver);
             outTh.quit();
         }
     }
@@ -211,7 +224,7 @@ public class LibUsbManager {
         try {
             // TODO: Check conditions
             if (Process.myUid() != socket.getPeerCredentials().getUid())
-                throw new ParseException(ctx.getString(
+                throw new ParseException(context.getString(
                         R.string.libusbmanager_msg_spoofing_detected));
             // =======
             final InputStream cis = socket.getInputStream();
@@ -225,12 +238,12 @@ public class LibUsbManager {
             final Map<String, UsbDevice> devList = usbManager.getDeviceList();
             final UsbDevice dev = devList.get(devName);
             if (dev == null)
-                throw new ProcessException(ctx.getString(
+                throw new ProcessException(context.getString(
                         R.string.libusbmanager_msg_no_device_found_s, devName));
             obtainUsbPermission(dev);
             devConn = usbManager.openDevice(dev);
             if (devConn == null)
-                throw new ProcessException(ctx.getString(
+                throw new ProcessException(context.getString(
                         R.string.libusbmanager_msg_unable_to_open_device_s, devName));
             socket.setFileDescriptorsForSend(new FileDescriptor[]{
                     ParcelFileDescriptor.adoptFd(devConn.getFileDescriptor()).getFileDescriptor()
@@ -239,7 +252,7 @@ public class LibUsbManager {
             while (cis.read() != -1) ; // Wait for closing by the client...
         } catch (final InterruptedIOException ignored) {
         } catch (final SecurityException | IOException |
-                ParseException | ProcessException e) {
+                       ParseException | ProcessException e) {
             onClientException(e);
         } finally {
             if (devConn != null)
@@ -252,7 +265,7 @@ public class LibUsbManager {
         public void run() {
             LocalServerSocket serverSocket = null;
             try {
-                serverSocket = new LocalServerSocket(sockName);
+                serverSocket = new LocalServerSocket(socketName);
                 while (!Thread.interrupted()) {
                     final LocalSocket socket = serverSocket.accept();
                     final Thread cth = new Thread() {
@@ -290,39 +303,51 @@ public class LibUsbManager {
     };
 
     /**
-     * Like {@link #LibUsbManager(Context ctx, String sockName)} but with
-     * {@code sockName = ctx.getApplicationContext().getPackageName() + ".libusb"}.
+     * Like {@link #LibUsbManager(Context context, String socketName)} but with
+     * {@code socketName = context.getApplicationContext().getPackageName() + ".libusb"}.
      *
-     * @param ctx Application context.
+     * @param context A context which application context to use.
      */
-    public LibUsbManager(@NonNull final Context ctx) {
-        this(ctx, ctx.getApplicationContext().getPackageName() + ".libusb");
+    public LibUsbManager(@NonNull final Context context) {
+        this(context, context.getApplicationContext().getPackageName() + ".libusb");
     }
 
     /**
      * Creates and starts a <b>libusb</b> manager instance for your application.
      * (Yes, this simple)
      * <p>Usage:</p>
-     * <pre><code>
+     * <pre>{@code
      * ...
-     * {@literal @}Keep // Protect from unwanted destruction in a case minifier is used.
+     * {@literal @}Keep // Protect from unwanted collection in a case minifier is used.
      * {@literal @}NonNull
      * private usbMan;
      * ...
-     * usbMan = new LibUsbManager(ctx);
+     * usbMan = new LibUsbManager(context);
      * ...
-     * </code></pre>
+     * }</pre>
      *
-     * @param ctx      Application context.
-     * @param sockName Socket name (in the Linux abstract namespace,
-     *                 see {@link LocalServerSocket#LocalServerSocket(String)}).
+     * @param context    A context which application context to use.
+     * @param socketName A socket name to use (in the Linux abstract namespace,
+     *                   see {@link LocalServerSocket#LocalServerSocket(String)}).
      */
-    public LibUsbManager(@NonNull final Context ctx, @NonNull final String sockName) {
-        this.ctx = ctx.getApplicationContext();
-        this.sockName = sockName;
+    public LibUsbManager(@NonNull final Context context, @NonNull final String socketName) {
+        this.context = context.getApplicationContext();
+        this.socketName = socketName;
+        actionUsbPermission = socketName + ACTION_USB_PERMISSION_SUFFIX;
         lth = new Thread(server, "LibUsbServer");
         lth.setDaemon(true);
         lth.start();
+    }
+
+    /**
+     * Stops the service from accepting new connections.
+     * <p>
+     * Already existing connections and provided USB device descriptors are not affected.
+     * <p>
+     * The effect is irreversible.
+     */
+    public void recycle() {
+        lth.interrupt();
     }
 
     @Override

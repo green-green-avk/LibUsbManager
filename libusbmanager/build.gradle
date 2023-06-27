@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.github.green-green-avk'
-version = '1.9'
+version = '1.10'
 
 android {
     namespace 'green_green_avk.libusbmanager'
