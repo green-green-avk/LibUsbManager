@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.github.green-green-avk'
-version = '1.10'
+version = '1.11'
 
 android {
     namespace 'green_green_avk.libusbmanager'
@@ -34,21 +34,22 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.5.0'
 }
 
-task javadoc(type: Javadoc) {
+tasks.register('javadoc', Javadoc) {
     failOnError true
     source = android.sourceSets.main.java.srcDirs
     classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
     options {
         addStringOption('link', 'https://developer.android.com/reference')
     }
-    android.libraryVariants.all { variant ->
+    android.libraryVariants.configureEach { variant ->
         if (variant.name == 'release') {
             owner.classpath += variant.javaCompileProvider.get().classpath
         }
     }
 }
 
-task javadocJar(type: Jar, dependsOn: javadoc) {
+tasks.register('javadocJar', Jar) {
+    dependsOn javadoc
     archiveClassifier.set 'javadoc'
     from javadoc.destinationDir
 }

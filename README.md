@@ -10,6 +10,7 @@ Device enumeration and hot plug/unplug events are supported.
 To be used with **green-green-avk/libusb**:
 
 Branches:
+
 * <kbd>[v1.0.23-android-libusbmanager](https://github.com/green-green-avk/libusb/tree/v1.0.23-android-libusbmanager)</kbd>
 * <kbd>[v1.0.26-android-libusbmanager](https://github.com/green-green-avk/libusb/tree/v1.0.26-android-libusbmanager)</kbd>
 

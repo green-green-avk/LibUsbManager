@@ -245,10 +245,20 @@ public class LibUsbManager {
             if (devConn == null)
                 throw new ProcessException(context.getString(
                         R.string.libusbmanager_msg_unable_to_open_device_s, devName));
-            socket.setFileDescriptorsForSend(new FileDescriptor[]{
-                    ParcelFileDescriptor.adoptFd(devConn.getFileDescriptor()).getFileDescriptor()
-            });
-            socket.getOutputStream().write(0);
+            // We need to `dup()` here: stupid `ParcelFileDescriptor.adoptFd()` semantics...
+            // It was possible to use it though before `fdsan` went such aggressive
+            // in Android 13.
+            // I prefer not go native to resolve it rightly for the sake of the library size.
+            final ParcelFileDescriptor devFd =
+                    ParcelFileDescriptor.fromFd(devConn.getFileDescriptor());
+            try {
+                socket.setFileDescriptorsForSend(new FileDescriptor[]{
+                        devFd.getFileDescriptor()
+                });
+                socket.getOutputStream().write(0);
+            } finally {
+                devFd.close();
+            }
             while (cis.read() != -1) ; // Wait for closing by the client...
         } catch (final InterruptedIOException ignored) {
         } catch (final SecurityException | IOException |
